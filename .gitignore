@@ -16,6 +16,7 @@ logs/
 participants.json
 dashboard_msg_id.json
 threads_to_delete.json
+chat_history.db*
 
 # System
 .DS_Store

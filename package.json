@@ -1,7 +1,7 @@
 {
-  "name": "partymaker",
+  "name": "pd2ih",
   "version": "1.0.0",
-  "description": "Matchmaker bot Discord",
+  "description": "PD2IH - zbiorczy bot Discord (Party Finder, Oracle, Feedback)",
   "main": "partymaker.js",
   "scripts": {
     "start": "node partymaker.js",
@@ -12,6 +12,7 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@google/genai": "^2.31.0",
     "discord.js": "^14.25.1",
     "dotenv": "^17.2.4"
   }

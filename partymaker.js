@@ -7,9 +7,12 @@ const {
   EmbedBuilder, StringSelectMenuBuilder, ChannelType, Events, MessageFlags,
   REST, Routes, PermissionFlagsBits, AttachmentBuilder, ModalBuilder, TextInputBuilder, TextInputStyle
 } = require('discord.js');
+const oracle = require('./oracle');
+const feedback = require('./feedback');
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates, GatewayIntentBits.GuildMessages],
+  // MessageContent (privileged) jest potrzebny Oracle do zapisywania treści czatu
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
 });
 
 const { TOKEN, GUILD_ID, CLIENT_ID } = process.env;
@@ -21,7 +24,6 @@ const THREAD_EXPIRY_MS = 86400000;  // 24h
 const COOLDOWN_MS = 60000;          // 1 min cooldown na tworzenie
 
 const PANEL_BANNER = 'dashboard.png';
-const FEEDBACK_CHANNEL_ID = '1556778409583976529';
 
 // Grafiki dla trybów gry
 const modeBanners = {
@@ -151,19 +153,24 @@ client.once(Events.ClientReady, async () => {
   threadsToDelete = loadThreadsQueue();
   console.log(`🚀 Bot aktywny: ${client.user.tag}`);
   logEvent('BOT_START', 'SYSTEM', `tag=${client.user.tag}`);
-  const commands = [{ name: 'party', description: 'Wysyła panel party maker' }];
+  const commands = [{ name: 'party', description: 'Wysyła panel party maker' }, feedback.command, oracle.command];
   await new REST({ version: '10' }).setToken(TOKEN).put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: commands });
 });
 
 client.on(Events.MessageCreate, async (message) => {
   if (message.system && message.type === 18) {
     await message.delete().catch(() => {});
+    return;
   }
+  oracle.trackMessage(message);
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
   const userId = interaction.user.id;
   const userTag = interaction.user.tag;
+
+  if (interaction.isChatInputCommand() && interaction.commandName === 'feedback') return feedback.handleCommand(interaction);
+  if (interaction.isChatInputCommand() && interaction.commandName === 'podsumowanie') return oracle.handlePodsumowanie(interaction);
 
   if (interaction.isChatInputCommand() && interaction.commandName === 'party') {
     await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
@@ -180,7 +187,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     const row = new ActionRowBuilder().addComponents(['Ranked', 'Normal', 'Battlecup', 'Low prio'].map((m, i) =>
       new ButtonBuilder().setCustomId(`start_${m}`).setLabel(m).setEmoji(modeEmojis[m]).setStyle([ButtonStyle.Success, ButtonStyle.Primary, ButtonStyle.Secondary, ButtonStyle.Danger][i])
     ));
-    row.addComponents(new ButtonBuilder().setCustomId('feedback').setLabel('Co myślisz o bocie?').setEmoji('💬').setStyle(ButtonStyle.Secondary));
+    row.addComponents(new ButtonBuilder().setCustomId(feedback.BUTTON_ID).setLabel('Napisz do nas').setEmoji('💬').setStyle(ButtonStyle.Secondary));
 
     await interaction.channel.send({ embeds: [embed], components: [row], files });
     return replyAndDelete(interaction, 'Panel wysłany!', 1000);
@@ -210,12 +217,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return interaction.editReply(createSetupPanel(userId, id));
     }
 
-    if (action === 'feedback') {
-      const modal = new ModalBuilder().setCustomId('modalfeedback').setTitle('Co myślisz o bocie?');
-      const input = new TextInputBuilder().setCustomId('feedbackinput').setLabel('Twoja opinia (max 1000 znaków)').setStyle(TextInputStyle.Paragraph).setMaxLength(1000).setRequired(true);
-      modal.addComponents(new ActionRowBuilder().addComponents(input));
-      return await interaction.showModal(modal);
-    }
+    if (interaction.customId === feedback.BUTTON_ID) return feedback.showModal(interaction);
 
     if (action === 'setdesc') {
       const modal = new ModalBuilder().setCustomId(`modaldesc_${id}`).setTitle('Opis ogłoszenia');
@@ -373,26 +375,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     const action = parts.shift();
     const mode = parts.join('_');
 
-    if (interaction.customId === 'modalfeedback') {
-      const text = interaction.fields.getTextInputValue('feedbackinput').trim();
-      if (!text) return interaction.reply({ content: '❌ Wiadomość jest pusta.', flags: [MessageFlags.Ephemeral] });
-      try {
-        const channel = await client.channels.fetch(FEEDBACK_CHANNEL_ID);
-        const embed = new EmbedBuilder()
-          .setTitle('💬 Opinia o bocie')
-          .setDescription(text)
-          .setAuthor({ name: userTag, iconURL: interaction.user.displayAvatarURL() })
-          .setFooter({ text: `ID: ${userId}` })
-          .setTimestamp()
-          .setColor(0xFF0000);
-        await channel.send({ embeds: [embed] });
-        logEvent('FEEDBACK_SENT', userTag, `length=${text.length}`);
-        return interaction.reply({ content: '✅ Dziękujemy za opinię!', flags: [MessageFlags.Ephemeral] });
-      } catch (err) {
-        logEvent('FEEDBACK_FAILED', userTag, String(err.message || err));
-        return interaction.reply({ content: '❌ Nie udało się wysłać wiadomości. Spróbuj później.', flags: [MessageFlags.Ephemeral] });
-      }
-    }
+    if (interaction.customId === feedback.MODAL_ID) return feedback.handleModal(interaction, logEvent);
 
     if (action === 'modaldesc') {
       const data = creationCache.get(userId);

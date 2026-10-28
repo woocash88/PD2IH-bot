@@ -53,6 +53,17 @@ function showModal(interaction) {
   return interaction.showModal(modal);
 }
 
+// Numer zgłoszenia zapisywany w pliku, żeby przetrwał restart bota.
+// Odczyt i zapis są synchroniczne, więc równoległe zgłoszenia nie dostaną tego samego numeru.
+const COUNTER_FILE = path.join(__dirname, 'feedback_counter.json');
+function nextFeedbackNumber() {
+  let last = 0;
+  try { last = JSON.parse(fs.readFileSync(COUNTER_FILE, 'utf8')).last || 0; } catch {}
+  const next = last + 1;
+  fs.writeFileSync(COUNTER_FILE, JSON.stringify({ last: next }));
+  return next;
+}
+
 async function handleModal(interaction, logEvent) {
   const userTag = interaction.user.tag;
   const text = interaction.fields.getTextInputValue(INPUT_ID).trim();
@@ -62,17 +73,18 @@ async function handleModal(interaction, logEvent) {
     const channel = await interaction.client.channels.fetch(FEEDBACK_CHANNEL_ID);
     const name = interaction.member?.displayName || interaction.user.globalName || interaction.user.username;
 
-    const header = await channel.send({ content: `📩 Nowa wiadomość od **${name}** (<@${interaction.user.id}>)` });
+    const num = nextFeedbackNumber();
+    const header = await channel.send({ content: `📩 Feedback **#${num}** od **${name}** (<@${interaction.user.id}>)` });
     const thread = await header.startThread({
-      name: `Feedback - ${name}`.slice(0, 100),
+      name: `Feedback #${num} ${name}`.slice(0, 100),
       autoArchiveDuration: 10080,
     });
     await thread.send({
-      content: `${FEEDBACK_ADMIN_IDS.map(id => `<@${id}>`).join(' ')}\n**Od:** ${name} (${userTag}, ID: ${interaction.user.id})\n\n${text}`,
+      content: `${FEEDBACK_ADMIN_IDS.map(id => `<@${id}>`).join(' ')}\n**Feedback #${num}**\n**Od:** ${name} (${userTag}, ID: ${interaction.user.id})\n\n${text}`,
       allowedMentions: { users: FEEDBACK_ADMIN_IDS },
     });
 
-    logEvent('FEEDBACK_SENT', userTag, `length=${text.length}`);
+    logEvent('FEEDBACK_SENT', userTag, `number=${num} length=${text.length}`);
     return interaction.reply({ content: '✅ Dziękujemy za wiadomość!', flags: [MessageFlags.Ephemeral] });
   } catch (err) {
     logEvent('FEEDBACK_FAILED', userTag, String(err.message || err));

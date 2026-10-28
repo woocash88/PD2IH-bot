@@ -19,7 +19,7 @@ const command = new SlashCommandBuilder()
   .toJSON();
 
 const buttonRow = () => new ActionRowBuilder().addComponents(
-  new ButtonBuilder().setCustomId(BUTTON_ID).setLabel('Otwórz ticket').setEmoji('📩').setStyle(ButtonStyle.Success)
+  new ButtonBuilder().setCustomId(BUTTON_ID).setLabel('Napisz do nas').setEmoji('💬').setStyle(ButtonStyle.Success)
 );
 
 const ICON = 'pd2ih_32x32.png';

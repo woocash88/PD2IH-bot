@@ -1,5 +1,7 @@
+const fs = require('fs');
+const path = require('path');
 const {
-  ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle,
+  ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle,
   SlashCommandBuilder, MessageFlags,
 } = require('discord.js');
 
@@ -17,15 +19,28 @@ const command = new SlashCommandBuilder()
   .toJSON();
 
 const buttonRow = () => new ActionRowBuilder().addComponents(
-  new ButtonBuilder().setCustomId(BUTTON_ID).setLabel('Napisz do nas').setEmoji('💬').setStyle(ButtonStyle.Primary)
+  new ButtonBuilder().setCustomId(BUTTON_ID).setLabel('Otwórz ticket').setEmoji('📩').setStyle(ButtonStyle.Success)
 );
 
+const ICON = 'pd2ih_32x32.png';
+const THUMB = 'riki.png';
+
 async function handleCommand(interaction) {
+  const files = [ICON, THUMB]
+    .filter(f => fs.existsSync(path.join(__dirname, f)))
+    .map(f => new AttachmentBuilder(path.join(__dirname, f), { name: f }));
+  const has = (f) => files.some(a => a.name === f);
+
   const embed = new EmbedBuilder()
-    .setTitle('💬 Feedback')
-    .setDescription('Masz pomysł, uwagę albo znalazłeś błąd? Kliknij przycisk poniżej i napisz do nas.\nWiadomość trafi bezpośrednio do administracji.')
+    .setAuthor({ name: 'Feedback', ...(has(ICON) && { iconURL: `attachment://${ICON}` }) })
+    .setDescription(
+      '🔰 Czekamy na Twój feedback! Daj znać co myślisz na temat Polskiej Ligi Dota, Party Findera, moderacji lub po prostu opinię na dowolny temat.\n\n' +
+      'Jesteśmy otwarci na zmiany, sugestie lub skargi, dlatego czekamy na Wasze opinie! Piszcie śmiało! 🤩'
+    )
     .setColor(0xFF0000);
-  await interaction.channel.send({ embeds: [embed], components: [buttonRow()] });
+  if (has(THUMB)) embed.setThumbnail(`attachment://${THUMB}`);
+
+  await interaction.channel.send({ embeds: [embed], components: [buttonRow()], files });
   return interaction.reply({ content: 'Panel wysłany!', flags: [MessageFlags.Ephemeral] });
 }
 
